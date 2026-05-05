@@ -1,66 +1,74 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
-from datetime import datetime
 
 st.set_page_config(page_title="Gerador de Pedidos", layout="wide")
 
 # =========================
-# HEADER
+# ESTILO (MESMO PADRÃO)
 # =========================
-
 st.markdown("""
 <style>
-h1 {
-    font-size: 32px;
+.main-title {
+    font-size: 28px;
     font-weight: 700;
 }
-.block-container {
-    padding-top: 2rem;
+.sub-title {
+    color: #666;
+    margin-top: -10px;
+}
+.card {
+    padding: 15px;
+    border-radius: 10px;
+    background-color: #f7f7f7;
+    margin-bottom: 10px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-col_logo, col_title = st.columns([1,5])
+# =========================
+# HEADER ORIGINAL
+# =========================
+col_logo, col_title = st.columns([1,6])
 
 with col_logo:
-    st.image("logo_santacruz.png", width=80)
+    st.image("logo_santacruz.png", width=70)
 
 with col_title:
-    st.title("Gerador de Pedidos")
-    st.caption("Plataforma de processamento e geração de pedidos")
+    st.markdown('<div class="main-title">Gerador de Pedidos</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-title">Plataforma de processamento e geração de pedidos</div>', unsafe_allow_html=True)
 
-st.divider()
+st.markdown("---")
 
 # =========================
-# UPLOAD
+# UPLOAD (MESMO LAYOUT)
 # =========================
 
 col1, col2 = st.columns(2)
 
 with col1:
+    st.markdown("### 1. Subir pedidos")
     pedidos_files = st.file_uploader(
-        "📦 Subir pedidos",
+        "Pode subir uma ou várias lojas",
         type=["xlsx"],
         accept_multiple_files=True
     )
 
 with col2:
+    st.markdown("### 2. Subir TODOS PRODUTOS")
     base_file = st.file_uploader(
-        "📊 Subir TODOS PRODUTOS",
+        "Base usada para separar produtos OL",
         type=["xlsx"]
     )
 
 # =========================
-# FUNÇÃO
+# FUNÇÃO PRINCIPAL
 # =========================
 
 def processar_pedido(df, base):
 
-    # Ajusta colunas automaticamente
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Detecta colunas
     col_cod = [c for c in df.columns if "barra" in c.lower()][0]
     col_qtd = [c for c in df.columns if "pedir" in c.lower()][0]
 
@@ -71,7 +79,6 @@ def processar_pedido(df, base):
 
     df["Cod_Barras"] = df["Cod_Barras"].astype(str).str.replace(".0","", regex=False)
 
-    # Merge com base
     base.columns = [str(c).strip() for c in base.columns]
 
     base = base.rename(columns={
@@ -86,10 +93,8 @@ def processar_pedido(df, base):
 
     df_final = df.merge(base, on="Cod_Barras", how="left")
 
-    # Pedido envio
     pedido_envio = df_final[["Cod_Barras", "Quant"]]
 
-    # Pedido OL
     pedido_ol = df_final[df_final["OL"] == "OL"][
         ["Cod_Barras", "Quant", "Descricao", "Laboratorio", "Categoria"]
     ]
@@ -103,27 +108,29 @@ def to_excel(df):
     return output.getvalue()
 
 # =========================
-# PROCESSAR
+# PROCESSAMENTO (MESMA IDEIA)
 # =========================
 
 if pedidos_files and base_file:
 
-    if st.button("🚀 Processar pedidos"):
+    st.markdown("---")
+
+    if st.button("🚀 Processar"):
 
         try:
             base = pd.read_excel(base_file)
 
-            st.success("✅ Arquivos gerados com sucesso. Baixe abaixo.")
+            st.success("Pedidos processados com sucesso")
 
-            for i, file in enumerate(pedidos_files):
+            for file in pedidos_files:
 
                 df = pd.read_excel(file)
 
                 envio, ol = processar_pedido(df, base)
 
-                nome_base = file.name.replace(".xlsx", "")
+                nome = file.name.replace(".xlsx","")
 
-                st.markdown(f"### 📦 Pedido: {nome_base}")
+                st.markdown(f"### 📦 {nome}")
 
                 col1, col2 = st.columns(2)
 
@@ -131,14 +138,14 @@ if pedidos_files and base_file:
                     st.download_button(
                         "📥 Baixar Pedido Envio",
                         to_excel(envio),
-                        file_name=f"{nome_base}_envio.xlsx"
+                        file_name=f"{nome}_envio.xlsx"
                     )
 
                 with col2:
                     st.download_button(
                         "📥 Baixar Pedido OL",
                         to_excel(ol),
-                        file_name=f"{nome_base}_ol.xlsx"
+                        file_name=f"{nome}_ol.xlsx"
                     )
 
         except Exception as e:
