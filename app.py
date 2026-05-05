@@ -13,6 +13,19 @@ st.set_page_config(
 )
 
 # =============================
+# MEMÓRIA DO APP
+# =============================
+
+if "resultados" not in st.session_state:
+    st.session_state.resultados = None
+
+if "data_hora" not in st.session_state:
+    st.session_state.data_hora = None
+
+if "totais" not in st.session_state:
+    st.session_state.totais = None
+
+# =============================
 # LOGO
 # =============================
 
@@ -27,7 +40,7 @@ def carregar_logo_base64(caminho):
 logo_base64 = carregar_logo_base64(LOGO_PATH)
 
 # =============================
-# VISUAL V2.3
+# VISUAL V2.6
 # =============================
 
 st.markdown("""
@@ -292,48 +305,67 @@ if processar:
                 "ol": pedido_ol
             })
 
-        st.success("✅ Arquivos gerados com sucesso. Baixe abaixo.")
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Pedidos processados", len(resultados))
-        m2.metric("Arquivos gerados", len(resultados) * 2)
-        m3.metric("Itens Envio", total_envio)
-        m4.metric("Itens OL", total_ol)
-
-        st.subheader("📄 Arquivos gerados")
-
-        for r in resultados:
-            with st.expander(f"📦 Pedido: {r['nome']}", expanded=True):
-
-                col_a, col_b = st.columns(2)
-
-                with col_a:
-                    st.markdown("#### 📦 Prévia Pedido Envio")
-                    st.dataframe(r["envio"], use_container_width=True)
-
-                    st.download_button(
-                        "⬇️ Baixar Pedido Envio",
-                        excel_download(r["envio"]),
-                        file_name=f"pedido_envio_{r['nome']}_{data_hora}.xlsx",
-                        key=f"download_envio_{r['nome']}_{data_hora}"
-                    )
-
-                with col_b:
-                    st.markdown("#### 🧾 Prévia Pedido OL")
-                    st.dataframe(r["ol"], use_container_width=True)
-
-                    st.download_button(
-                        "⬇️ Baixar Pedido OL",
-                        excel_download(r["ol"]),
-                        file_name=f"pedido_ol_{r['nome']}_{data_hora}.xlsx",
-                        key=f"download_ol_{r['nome']}_{data_hora}"
-                    )
+        st.session_state.resultados = resultados
+        st.session_state.data_hora = data_hora
+        st.session_state.totais = {
+            "pedidos": len(resultados),
+            "arquivos": len(resultados) * 2,
+            "envio": total_envio,
+            "ol": total_ol
+        }
 
     except Exception as e:
         st.error(f"❌ Erro: {e}")
 
+# =============================
+# EXIBIÇÃO PERSISTENTE
+# =============================
+
+if st.session_state.resultados:
+
+    resultados = st.session_state.resultados
+    data_hora = st.session_state.data_hora
+    totais = st.session_state.totais
+
+    st.success("✅ Arquivos gerados com sucesso. Baixe abaixo.")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Pedidos processados", totais["pedidos"])
+    m2.metric("Arquivos gerados", totais["arquivos"])
+    m3.metric("Itens Envio", totais["envio"])
+    m4.metric("Itens OL", totais["ol"])
+
+    st.subheader("📄 Arquivos gerados")
+
+    for r in resultados:
+        with st.expander(f"📦 Pedido: {r['nome']}", expanded=True):
+
+            col_a, col_b = st.columns(2)
+
+            with col_a:
+                st.markdown("#### 📦 Prévia Pedido Envio")
+                st.dataframe(r["envio"], use_container_width=True)
+
+                st.download_button(
+                    "⬇️ Baixar Pedido Envio",
+                    excel_download(r["envio"]),
+                    file_name=f"pedido_envio_{r['nome']}_{data_hora}.xlsx",
+                    key=f"download_envio_{r['nome']}_{data_hora}"
+                )
+
+            with col_b:
+                st.markdown("#### 🧾 Prévia Pedido OL")
+                st.dataframe(r["ol"], use_container_width=True)
+
+                st.download_button(
+                    "⬇️ Baixar Pedido OL",
+                    excel_download(r["ol"]),
+                    file_name=f"pedido_ol_{r['nome']}_{data_hora}.xlsx",
+                    key=f"download_ol_{r['nome']}_{data_hora}"
+                )
+
 st.markdown("""
 <div class="footer">
-    Gerador de Pedidos • V2.6 • Plataforma para processamento e geração de pedidos
+    Gerador de Pedidos • V3.0 • Plataforma para processamento e geração de pedidos
 </div>
 """, unsafe_allow_html=True)
