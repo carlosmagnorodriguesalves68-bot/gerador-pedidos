@@ -1,152 +1,156 @@
+# =========================
+# GERADOR DE PEDIDOS V2.3
+# =========================
+
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+from datetime import datetime
+from pathlib import Path
+import re
+import base64
 
-st.set_page_config(page_title="Gerador de Pedidos", layout="wide")
+st.set_page_config(page_title="Gerador de Pedidos", page_icon="📦", layout="wide")
 
 # =========================
-# ESTILO (MESMO PADRÃO)
+# LOGO
+# =========================
+def carregar_logo_base64(caminho):
+    try:
+        with open(caminho, "rb") as img:
+            return base64.b64encode(img.read()).decode()
+    except:
+        return ""
+
+logo_base64 = carregar_logo_base64("logo_santacruz.png")
+
+# =========================
+# CSS
 # =========================
 st.markdown("""
 <style>
-.main-title {
-    font-size: 28px;
-    font-weight: 700;
+.header {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    display: flex;
+    align-items: center;
+    gap: 20px;
 }
-.sub-title {
-    color: #666;
-    margin-top: -10px;
+
+.title {
+    font-size: 30px;
+    font-weight: 800;
+    color: #0D1B2A;
 }
-.card {
-    padding: 15px;
-    border-radius: 10px;
-    background-color: #f7f7f7;
-    margin-bottom: 10px;
+
+.subtitle {
+    font-size: 14px;
+    color: #555;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# HEADER ORIGINAL
+# HEADER
 # =========================
-col_logo, col_title = st.columns([1,6])
+if logo_base64:
+    st.markdown(f"""
+    <div class="header">
+        <img src="data:image/png;base64,{logo_base64}" width="160">
+        <div>
+            <div class="title">Gerador de Pedidos</div>
+            <div class="subtitle">Plataforma para processamento e geração de pedidos</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-with col_logo:
-    st.image("logo_santacruz.png", width=70)
-
-with col_title:
-    st.markdown('<div class="main-title">Gerador de Pedidos</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-title">Plataforma de processamento e geração de pedidos</div>', unsafe_allow_html=True)
-
-st.markdown("---")
+st.divider()
 
 # =========================
-# UPLOAD (MESMO LAYOUT)
+# FUNÇÕES
+# =========================
+
+def limpar_codigo(valor):
+    try:
+        return str(int(float(valor)))
+    except:
+        return ""
+
+def excel_download(df):
+    output = BytesIO()
+    df.to_excel(output, index=False)
+    output.seek(0)
+    return output.getvalue()
+
+# =========================
+# UPLOAD
 # =========================
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("### 1. Subir pedidos")
-    pedidos_files = st.file_uploader(
-        "Pode subir uma ou várias lojas",
-        type=["xlsx"],
-        accept_multiple_files=True
-    )
+    pedidos = st.file_uploader("Pedidos", accept_multiple_files=True)
 
 with col2:
-    st.markdown("### 2. Subir TODOS PRODUTOS")
-    base_file = st.file_uploader(
-        "Base usada para separar produtos OL",
-        type=["xlsx"]
-    )
+    base = st.file_uploader("Base Produtos")
+
+processar = st.button("🚀 PROCESSAR")
 
 # =========================
-# FUNÇÃO PRINCIPAL
+# PROCESSAMENTO
 # =========================
 
-def processar_pedido(df, base):
+if processar:
 
-    df.columns = [str(c).strip() for c in df.columns]
+    if not pedidos or not base:
+        st.warning("Envie os arquivos!")
+        st.stop()
 
-    col_cod = [c for c in df.columns if "barra" in c.lower()][0]
-    col_qtd = [c for c in df.columns if "pedir" in c.lower()][0]
+    base_df = pd.read_excel(base)
+    base_df["Código EAN"] = base_df["Código EAN"].apply(limpar_codigo)
 
-    df = df[[col_cod, col_qtd]].copy()
-    df.columns = ["Cod_Barras", "Quant"]
+    for arquivo in pedidos:
 
-    df = df[df["Quant"] > 0]
+        df = pd.read_excel(arquivo)
 
-    df["Cod_Barras"] = df["Cod_Barras"].astype(str).str.replace(".0","", regex=False)
+        # achar colunas
+        cod_col = [c for c in df.columns if "barra" in str(c).lower()][0]
+        qtd_col = [c for c in df.columns if "pedir" in str(c).lower()][0]
 
-    base.columns = [str(c).strip() for c in base.columns]
+        df = df[[cod_col, qtd_col]].copy()
+        df.columns = ["EAN", "Quant"]
 
-    base = base.rename(columns={
-        "Código EAN": "Cod_Barras",
-        "Descrição": "Descricao",
-        "Laboratório": "Laboratorio",
-        "Categoria": "Categoria",
-        "OL": "OL"
-    })
+        df["EAN"] = df["EAN"].apply(limpar_codigo)
+        df["Quant"] = pd.to_numeric(df["Quant"], errors="coerce").fillna(0)
 
-    base["Cod_Barras"] = base["Cod_Barras"].astype(str)
+        df = df[df["Quant"] > 0]
 
-    df_final = df.merge(base, on="Cod_Barras", how="left")
+        merge = df.merge(base_df, left_on="EAN", right_on="Código EAN", how="left")
 
-    pedido_envio = df_final[["Cod_Barras", "Quant"]]
+        envio = merge[merge["OL"] != "OL"][["EAN", "Quant"]]
+        envio.columns = ["Cód. Barras", "Quant"]
 
-    pedido_ol = df_final[df_final["OL"] == "OL"][
-        ["Cod_Barras", "Quant", "Descricao", "Laboratorio", "Categoria"]
-    ]
+        ol = merge[merge["OL"] == "OL"][["EAN", "Quant", "Descrição", "Laboratório", "Categoria"]]
+        ol.columns = ["Cód. Barras", "Quant", "Descrição", "Laboratório", "Categoria"]
 
-    return pedido_envio, pedido_ol
+        st.success(f"✔ Processado: {arquivo.name}")
 
-def to_excel(df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False)
-    return output.getvalue()
+        col_a, col_b = st.columns(2)
 
-# =========================
-# PROCESSAMENTO (MESMA IDEIA)
-# =========================
+        with col_a:
+            st.dataframe(envio)
+            st.download_button(
+                "Baixar Envio",
+                excel_download(envio),
+                file_name=f"envio_{arquivo.name}"
+            )
 
-if pedidos_files and base_file:
-
-    st.markdown("---")
-
-    if st.button("🚀 Processar"):
-
-        try:
-            base = pd.read_excel(base_file)
-
-            st.success("Pedidos processados com sucesso")
-
-            for file in pedidos_files:
-
-                df = pd.read_excel(file)
-
-                envio, ol = processar_pedido(df, base)
-
-                nome = file.name.replace(".xlsx","")
-
-                st.markdown(f"### 📦 {nome}")
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.download_button(
-                        "📥 Baixar Pedido Envio",
-                        to_excel(envio),
-                        file_name=f"{nome}_envio.xlsx"
-                    )
-
-                with col2:
-                    st.download_button(
-                        "📥 Baixar Pedido OL",
-                        to_excel(ol),
-                        file_name=f"{nome}_ol.xlsx"
-                    )
-
-        except Exception as e:
-            st.error(f"Erro: {e}")
+        with col_b:
+            st.dataframe(ol)
+            st.download_button(
+                "Baixar OL",
+                excel_download(ol),
+                file_name=f"ol_{arquivo.name}"
+            )
